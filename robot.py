@@ -6,11 +6,19 @@
 #
 
 import wpilib
+from limelight import LimeLight
 
 class Robot(wpilib.TimedRobot):
     def robotInit(self) -> None:
         """Robot initialization function"""
         print("Yes; we are alive")
+        #print("Yup", NetworkTables.getTable("limelight").getNumber('tx', 0))
+        ll=LimeLight()
+        print("Yea", ll.getNumber('tx', 0))
+        print("Yah", ll.tx)
+        #print("Nah", ll.txvalid)
+        print("Vectors", ll.getNumberArray('botpose'))
+        print("VecYeah", ll.botpose)
 
     def robotPeriodic(self) -> None:
         pass
