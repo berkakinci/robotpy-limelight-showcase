@@ -3,6 +3,8 @@
 # the WPILib BSD license file in the root directory of this project.
 
 from networktables import NetworkTables
+from sys import modules
+from time import sleep
 
 class LimeLight:
     _ll_attributes = {
@@ -62,8 +64,27 @@ class LimeLight:
 
     def __init__(self, name="limelight"):
         self.name=name
+        NetworkTables.startClient('localhost')
         self.nt=NetworkTables.getTable(name)
     
+    def isReady(self):
+        if not NetworkTables.isConnected():
+            return False
+        if not self.nt.containsKey('camMode'):
+            return False
+        return True
+
+    def waitReady(self, verbose=False):
+        if 'pyfrc.tests' in modules:
+            if verbose:
+                print('Not waiting for LimeLight in pyfrc.tests.')
+            return
+        while not self.isReady():
+            if verbose:
+                print("Waiting for LimeLight NetworkTables client...")
+            sleep(0.25)
+        return
+
     def getNumber(self, varname, default=0):
         return self.nt.getNumber(varname, default)
 

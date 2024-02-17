@@ -12,16 +12,35 @@ class Robot(wpilib.TimedRobot):
     def robotInit(self) -> None:
         """Robot initialization function"""
         print("Yes; we are alive")
-        #print("Yup", NetworkTables.getTable("limelight").getNumber('tx', 0))
-        ll=LimeLight()
-        print("Yea", ll.getNumber('tx', 0))
-        print("Yah", ll.tx)
-        #print("Nah", ll.txvalid)
-        print("Vectors", ll.getNumberArray('botpose'))
-        print("VecYeah", ll.botpose)
+        self.counter=0
+        self.ll=LimeLight()
+        self.ll.waitReady(verbose=True) # Will hang here.
+
+        print("Yah", self.ll.camerapose_robotspace)
+        #print("Nah", self.ll.txvalidbogusattribute) # Should raise
+        print("Vector the long way", self.ll.getNumberArray('botpose'))
+        print("Vector the easy way", self.ll.botpose)
+        print("ledMode", self.ll.ledMode,
+              "camMode", self.ll.camMode,
+              "pipeline", self.ll.pipeline,
+              "getpipe", self.ll.getpipe)
+        self.ll.ledMode=(self.ll.ledMode+1)%4
+        self.ll.camMode=0
+        self.ll.pipeline=0
+        print("ledMode", self.ll.ledMode,
+              "camMode", self.ll.camMode,
+              "pipeline", self.ll.pipeline,
+              "getpipe", self.ll.getpipe)
 
     def robotPeriodic(self) -> None:
-        pass
+        self.counter+=1
+        self.counter%=25
+        if self.counter==0: # Every half second.
+            print('tv', self.ll.tv,
+                  'tx', self.ll.tx,
+                  'ty', self.ll.ty,
+                  'tid', self.ll.tid,
+                  'targetpose_robotspace', self.ll.targetpose_robotspace)
 
     def disabledPeriodic(self) -> None:
         pass
