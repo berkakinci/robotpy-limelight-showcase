@@ -62,20 +62,21 @@ class Drivetrain:
 
         self.gyro = Pigeon2(swerveConfig['swerveDrive']['imu']['id'])
 
-        self.kinematics = SwerveDrive4Kinematics(modules['frontLeft']['location'],
-                                                 modules['frontRight']['location'],
-                                                 modules['backLeft']['location'],
-                                                 modules['backRight']['location'])
+        moduleLocations = [ modules[modName]['location']
+                            for modName in DriveTrain.moduleOrder ]
+        self.kinematics = SwerveDrive4Kinematics(*moduleLocations)
 
         self.odometry = SwerveDrive4Odometry(self.kinematics,
                                              Rotation2d.fromDegrees(self.gyro.get_yaw()),
-                                             ( modules['frontLeft']['swerveModule'].getPosition(),
-                                               modules['frontRight']['swerveModule'].getPosition(),
-                                               modules['backLeft']['swerveModule'].getPosition(),
-                                               modules['backRight']['swerveModule'].getPosition(),
-                                              ), )
+                                             self._swerveModuleGetPositions())
 
         self.gyro.set_yaw(0) # FIXME: shouldn't we reset before above objects?
+
+    def _swerveModuleGetPositions(self):
+        """Returns a tuple of SwerveModulePosition for all swerve modules."""
+        moduleGetPositions = [ self.modules[modName]['swerveModule'].getPosition()
+                               for modName in DriveTrain.moduleOrder ]
+        return tuple(moduleGetPositions)
 
     def drive(
         self,
@@ -93,18 +94,16 @@ class Drivetrain:
         :param fieldRelative: Whether the provided x and y speeds are relative to the field.
         :param periodSeconds: Time
         """
+        if fieldRelative:
+            desiredChassisSpeeds = (
+                ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot,
+                                                      Rotation2d.fromDegrees(self.gyro.get_yaw())) )
+        else:
+            desiredChassisSpeeds = (
+                ChassisSpeeds(xSpeed, ySpeed, rot) )
         swerveModuleStates = self.kinematics.toSwerveModuleStates(
-            ChassisSpeeds.discretize(
-                (
-                    ChassisSpeeds.fromFieldRelativeSpeeds(
-                        xSpeed, ySpeed, rot, Rotation2d.fromDegrees(self.gyro.get_yaw())
-                    )
-                    if fieldRelative
-                    else ChassisSpeeds(xSpeed, ySpeed, rot)
-                ),
-                periodSeconds,
-            )
-        )
+            ChassisSpeeds.discretize(desiredChassisSpeeds,
+                                     periodSeconds) )
         SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveModuleStates, kMaxSpeed)
         for idx, modName in enumerate(DriveTrain.moduleOrder):
             self.modules[modName].setDesiredState(swerveModuleStates[idx])
@@ -112,8 +111,4 @@ class Drivetrain:
     def updateOdometry(self) -> None:
         """Updates the field relative position of the robot."""
         self.odometry.update(Rotation2d.fromDegrees(self.gyro.get_yaw()),
-                             ( self.modules['frontLeft']['swerveModule'].getPosition(),
-                               self.modules['frontRight']['swerveModule'].getPosition(),
-                               self.modules['backLeft']['swerveModule'].getPosition(),
-                               self.modules['backRight']['swerveModule'].getPosition(),
-                              ), )
+                             self._swerveModuleGetPositions())
