@@ -10,15 +10,24 @@ from wpimath.geometry import Rotation2d
 from wpimath.controller import PIDController, ProfiledPIDControllerRadians, SimpleMotorFeedforwardMeters
 from wpimath.trajectory import TrapezoidProfileRadians
 import rev
-import phoenix5.sensors as ctre
+import phoenix6.hardware as ctre
+import phoenix6.configs as ctre_configs
 
 kWheelRadius = 0.0508
 kDriveGearRatio = 8.14/1
-kTurningEncoderDirectionCW = True
-kTurningEncoderCodeCount = 2**12
-kTurningEncoderTimeoutMS = 500
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
+
+class radCANcoder(ctre.CANcoder):
+    """
+    Derived from CANcoder to add radian accessors.
+    wpimath.geometry.Rotation2d() wants radians.
+    """
+    def get_absolute_position_radians(self):
+        return math.tau * self.get_absolute_position().value
+
+    def get_position_radians(self):
+        return math.tau * self.get_position().value
 
 
 class SwerveModule:
@@ -27,14 +36,14 @@ class SwerveModule:
         driveMotorID: int,
         turningMotorID: int,
         turningEncoderID: int,
-        turningEncoderOffsetDegrees: int,
+        turningEncoderOffsetRotations: int,
     ) -> None:
         """Constructs a SwerveModule with a drive motor, turning motor and turning encoder.
 
         :param driveMotorID:      CAN ID the drive motor.
         :param turningMotorID:    CAN ID for the turning motor.
         :param turningEncoderID:  CAN ID for the turning encoder
-        :param turningEncoderOffsetDegrees: Encoder offset for pointing to robot front (+X)
+        :param turningEncoderOffsetRotations: Encoder offset (in rotations) for pointing to robot front (+X)
         """
         self.driveMotor = rev.CANSparkMax(driveMotorID,
                                           rev.CANSparkLowLevel.MotorType.kBrushless)
@@ -42,7 +51,8 @@ class SwerveModule:
                                             rev.CANSparkLowLevel.MotorType.kBrushless)
 
         self.driveEncoder = self.driveMotor.getEncoder()
-        self.turningEncoder = ctre.CANCoder(turningEncoderID)
+        self.turningEncoder = radCANcoder(turningEncoderID)
+        self.turningMotorEncoder = self.turningMotor.getEncoder() # For Debug only
 
         # Gains are for example purposes only - must be determined for your own robot!
         self.drivePIDController = PIDController(0.01, 0, 0)
@@ -73,22 +83,17 @@ class SwerveModule:
             60 / motorRevolutionsPerMeter
         )
 
-        # Set the conversion factor to get radians out of encoder.
-        # wpimath.geometry.Rotation2d() wants radians.
-        self.turningEncoder.configAbsoluteSensorRange(ctre.AbsoluteSensorRange.Unsigned_0_to_360,
-                                                      kTurningEncoderTimeoutMS)
-        self.turningEncoder.configSensorDirection(kTurningEncoderDirectionCW,
-                                                  kTurningEncoderTimeoutMS)
-        self.turningEncoder.configMagnetOffset(offsetDegrees = turningEncoderOffsetDegrees,
-                                               timeoutMs = kTurningEncoderTimeoutMS)
-        self.turningEncoder.configFeedbackCoefficient(sensorCoefficient = math.tau/kTurningEncoderCodeCount,
-                                                      unitString = 'radians',
-                                                      sensortimeBase = ctre.SensorTimeBase.PerSecond,
-                                                      timeoutMs = kTurningEncoderTimeoutMS)
+        # Set up encoder for our PID input expectations; and robot encoder magnet offsets.
+        turningEncoderConfig = ctre_configs.CANcoderConfiguration()
+        magSensor = turningEncoderConfig.magnet_sensor
+        magSensor.with_sensor_direction(magSensor.sensor_direction.CLOCKWISE_POSITIVE)
+        magSensor.with_absolute_sensor_range(magSensor.absolute_sensor_range.SIGNED_PLUS_MINUS_HALF)
+        magSensor.with_magnet_offset(turningEncoderOffsetRotations)
+        self.turningEncoder.configurator.apply(turningEncoderConfig)
 
-        # Limit the PID Controller's input range between 0 and tau and set the input
+        # Limit the PID Controller's input range between -tau/2 and +tau/2 and set the input
         # to be continuous.
-        self.turningPIDController.enableContinuousInput(0, math.tau)
+        self.turningPIDController.enableContinuousInput(-math.tau/2, math.tau/2)
 
     def getState(self) -> SwerveModuleState:
         """Returns the current state of the module.
@@ -97,7 +102,7 @@ class SwerveModule:
         """
         return SwerveModuleState(
             self.driveEncoder.getVelocity(),
-            Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: Verify 0-tau absolute is OK.  otherwise getPosition()
+            Rotation2d(self.turningEncoder.get_absolute_position_radians()), # FIXME: Verify -tau/2 - tau/2 absolute is OK.  otherwise get_position()
         )
 
     def getPosition(self) -> SwerveModulePosition:
@@ -107,7 +112,7 @@ class SwerveModule:
         """
         return SwerveModulePosition(
             self.driveEncoder.getVelocity(),
-            Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: this or getPosition()
+            Rotation2d(self.turningEncoder.get_absolute_position_radians()), # FIXME: this or get_position()
         )
 
     def setDesiredState(
@@ -142,3 +147,15 @@ class SwerveModule:
 
         self.driveMotor.setVoltage(driveOutput + driveFeedforward)
         self.turningMotor.setVoltage(turnOutput + turnFeedforward)
+
+    def debugSensorDump(self):
+        """Returns dictionary with sensor readings for debug purposes."""
+        dump={}
+        dump['driveEncoderPos'] = self.driveEncoder.getPosition()
+        dump['driveEncoderVel'] = self.driveEncoder.getVelocity()
+        dump['turningEncoderAbsPos'] = self.turningEncoder.get_absolute_position().value
+        dump['turningEncoderRelPos'] = self.turningEncoder.get_position().value
+        dump['turningEncoderVel'] = self.turningEncoder.get_velocity().value
+        dump['turningMotorEncoderPos'] = self.turningMotorEncoder.getPosition()
+        dump['turningMotorEncoderVel'] = self.turningMotorEncoder.getVelocity()
+        return dump

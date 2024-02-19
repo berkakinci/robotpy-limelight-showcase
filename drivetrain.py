@@ -112,3 +112,11 @@ class Drivetrain:
         """Updates the field relative position of the robot."""
         self.odometry.update(Rotation2d.fromDegrees(self.gyro.get_yaw().value),
                              self._swerveModuleGetPositions())
+
+    def debugSensorDump(self):
+        dump = { modName : self.modules[modName]['swerveModule'].debugSensorDump()
+                 for modName in Drivetrain.moduleOrder }
+        dump['gyro'] = {
+            'yaw' : self.gyro.get_yaw().value,
+        }
+        return dump

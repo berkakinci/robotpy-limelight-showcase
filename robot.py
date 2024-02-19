@@ -45,6 +45,7 @@ class Robot(wpilib.TimedRobot):
                   'ty', self.ll.ty,
                   'tid', self.ll.tid,
                   'targetpose_robotspace', self.ll.targetpose_robotspace)
+            print(self.swerve.debugSensorDump())
         self.swerve.updateOdometry()
 
     def disabledPeriodic(self) -> None:
