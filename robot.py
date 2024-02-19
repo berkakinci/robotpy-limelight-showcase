@@ -6,7 +6,9 @@
 #
 
 import wpilib
+import math
 from limelight import LimeLight
+from drivetrain import Drivetrain
 
 class Robot(wpilib.TimedRobot):
     def robotInit(self) -> None:
@@ -14,6 +16,8 @@ class Robot(wpilib.TimedRobot):
         print("Yes; we are alive")
         self.counter=0
         self.ll=LimeLight()
+        self.swerve=Drivetrain()
+
         self.ll.waitReady(verbose=True) # Will hang here.
 
         print("Yah", self.ll.camerapose_robotspace)
@@ -41,6 +45,7 @@ class Robot(wpilib.TimedRobot):
                   'ty', self.ll.ty,
                   'tid', self.ll.tid,
                   'targetpose_robotspace', self.ll.targetpose_robotspace)
+        self.swerve.updateOdometry()
 
     def disabledPeriodic(self) -> None:
         pass
@@ -58,4 +63,8 @@ class Robot(wpilib.TimedRobot):
         pass
 
     def drive(self) -> None:
-        pass
+        fieldRelative = False
+        xSpeed = 0
+        ySpeed = 0
+        rotSpeed = math.tau/10
+        self.swerve.drive(xSpeed, ySpeed, rotSpeed, fieldRelative, self.getPeriod())

@@ -8,9 +8,9 @@ import math
 from wpimath.kinematics import SwerveModuleState, SwerveModulePosition
 from wpimath.geometry import Rotation2d
 from wpimath.controller import PIDController, ProfiledPIDControllerRadians, SimpleMotorFeedforwardMeters
-from wpimath.trajectory import TrapezoidProfile
+from wpimath.trajectory import TrapezoidProfileRadians
 import rev
-import phoenix5.sensors
+import phoenix5.sensors as ctre
 
 kWheelRadius = 0.0508
 kDriveGearRatio = 8.14/1
@@ -34,12 +34,15 @@ class SwerveModule:
         :param driveMotorID:      CAN ID the drive motor.
         :param turningMotorID:    CAN ID for the turning motor.
         :param turningEncoderID:  CAN ID for the turning encoder
+        :param turningEncoderOffsetDegrees: Encoder offset for pointing to robot front (+X)
         """
-        self.driveMotor = rev.CANSparkMax(driveMotorID)
-        self.turningMotor = rev.CANSparkMax(turningMotorID)
+        self.driveMotor = rev.CANSparkMax(driveMotorID,
+                                          rev.CANSparkLowLevel.MotorType.kBrushless)
+        self.turningMotor = rev.CANSparkMax(turningMotorID,
+                                            rev.CANSparkLowLevel.MotorType.kBrushless)
 
-        self.driveEncoder = driveMotor.getEncoder()
-        self.turningEncoder = phoenix5.sensors.CANCoder(turningEncoderID)
+        self.driveEncoder = self.driveMotor.getEncoder()
+        self.turningEncoder = ctre.CANCoder(turningEncoderID)
 
         # Gains are for example purposes only - must be determined for your own robot!
         self.drivePIDController = PIDController(0.01, 0, 0)
@@ -49,7 +52,7 @@ class SwerveModule:
             0.01,
             0,
             0,
-            TrapezoidProfile.Constraints(
+            TrapezoidProfileRadians.Constraints(
                 kModuleMaxAngularVelocity,
                 kModuleMaxAngularAcceleration,
             ),
@@ -72,7 +75,7 @@ class SwerveModule:
 
         # Set the conversion factor to get radians out of encoder.
         # wpimath.geometry.Rotation2d() wants radians.
-        self.turningEncoder.configAbsoluteSensorRange(phoenix5.sensors.AbsoluteSensorRange.Unsigned_0_to_360,
+        self.turningEncoder.configAbsoluteSensorRange(ctre.AbsoluteSensorRange.Unsigned_0_to_360,
                                                       kTurningEncoderTimeoutMS)
         self.turningEncoder.configSensorDirection(kTurningEncoderDirectionCW,
                                                   kTurningEncoderTimeoutMS)
@@ -80,6 +83,7 @@ class SwerveModule:
                                                timeoutMs = kTurningEncoderTimeoutMS)
         self.turningEncoder.configFeedbackCoefficient(sensorCoefficient = math.tau/kTurningEncoderCodeCount,
                                                       unitString = 'radians',
+                                                      sensortimeBase = ctre.SensorTimeBase.PerSecond,
                                                       timeoutMs = kTurningEncoderTimeoutMS)
 
         # Limit the PID Controller's input range between 0 and tau and set the input

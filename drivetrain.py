@@ -63,11 +63,11 @@ class Drivetrain:
         self.gyro = Pigeon2(swerveConfig['swerveDrive']['imu']['id'])
 
         moduleLocations = [ modules[modName]['location']
-                            for modName in DriveTrain.moduleOrder ]
+                            for modName in Drivetrain.moduleOrder ]
         self.kinematics = SwerveDrive4Kinematics(*moduleLocations)
 
         self.odometry = SwerveDrive4Odometry(self.kinematics,
-                                             Rotation2d.fromDegrees(self.gyro.get_yaw()),
+                                             Rotation2d.fromDegrees(self.gyro.get_yaw().value),
                                              self._swerveModuleGetPositions())
 
         self.gyro.set_yaw(0) # FIXME: shouldn't we reset before above objects?
@@ -75,7 +75,7 @@ class Drivetrain:
     def _swerveModuleGetPositions(self):
         """Returns a tuple of SwerveModulePosition for all swerve modules."""
         moduleGetPositions = [ self.modules[modName]['swerveModule'].getPosition()
-                               for modName in DriveTrain.moduleOrder ]
+                               for modName in Drivetrain.moduleOrder ]
         return tuple(moduleGetPositions)
 
     def drive(
@@ -97,7 +97,7 @@ class Drivetrain:
         if fieldRelative:
             desiredChassisSpeeds = (
                 ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot,
-                                                      Rotation2d.fromDegrees(self.gyro.get_yaw())) )
+                                                      Rotation2d.fromDegrees(self.gyro.get_yaw().value)) )
         else:
             desiredChassisSpeeds = (
                 ChassisSpeeds(xSpeed, ySpeed, rot) )
@@ -105,10 +105,10 @@ class Drivetrain:
             ChassisSpeeds.discretize(desiredChassisSpeeds,
                                      periodSeconds) )
         SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveModuleStates, kMaxSpeed)
-        for idx, modName in enumerate(DriveTrain.moduleOrder):
-            self.modules[modName].setDesiredState(swerveModuleStates[idx])
+        for idx, modName in enumerate(Drivetrain.moduleOrder):
+            self.modules[modName]['swerveModule'].setDesiredState(swerveModuleStates[idx])
 
     def updateOdometry(self) -> None:
         """Updates the field relative position of the robot."""
-        self.odometry.update(Rotation2d.fromDegrees(self.gyro.get_yaw()),
+        self.odometry.update(Rotation2d.fromDegrees(self.gyro.get_yaw().value),
                              self._swerveModuleGetPositions())
