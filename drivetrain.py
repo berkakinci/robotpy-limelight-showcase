@@ -1,56 +1,81 @@
 #
-# Copyright (c) FIRST and other WPILib contributors.
+# Copyright (c) Berk Akinci, FIRST and other WPILib contributors.
 # Open Source Software; you can modify and/or share it under the terms of
 # the WPILib BSD license file in the root directory of this project.
 #
 
 import math
-import wpilib
-import wpimath.geometry
-import wpimath.kinematics
-import swervemodule
+from wpimath.geometry import Translation2d, Rotation2d
+from wpimath.kinematics import SwerveDrive4Kinematics, SwerveDrive4Odometry, ChassisSpeeds
+from swervemodule import SwerveModule
+from phoenix6.hardware import Pigeon2
 
 kMaxSpeed = 3.0  # 3 meters per second
-kMaxAngularSpeed = math.pi  # 1/2 rotation per second
-
+kMaxAngularSpeed = math.tau/2  # 1/2 rotation per second
+kModuleLocationComponent = 0.381
+swerveConfig = {
+    'swerveDrive' : { 'imu'      : { 'id'     :   14, }, },
+    'frontRight'  : { 'drive'    : { 'id'     :    5, },
+                      'angle'    : { 'id'     :    1, },
+                      'encoder'  : { 'id'     :    9,
+                                     'offset' : -135, }, # FIXME: placeholder
+                      'location' : (+1, -1), },
+    'backRight'   : { 'drive'    : { 'id'     :    8, },
+                      'angle'    : { 'id'     :    4, },
+                      'encoder'  : { 'id'     :   12,
+                                     'offset' :  135, }, # FIXME: placeholder
+                      'location' : (-1, -1), },
+    'frontLeft'   : { 'drive'    : { 'id'     :    6, },
+                      'angle'    : { 'id'     :    2, },
+                      'encoder'  : { 'id'     :   10,
+                                     'offset' :  -45, }, # FIXME: placeholder
+                      'location' : (+1, +1), },
+    'backLeft'    : { 'drive'    : { 'id'     :    7, },
+                      'angle'    : { 'id'     :    3, },
+                      'encoder'  : { 'id'     :   11,
+                                     'offset' :   45, }, # FIXME: placeholder
+                      'location' : (-1, +1), },
+}
 
 class Drivetrain:
     """
     Represents a swerve drive style drivetrain.
     """
+    moduleOrder = ('frontLeft', 'frontRight', 'backLeft', 'backRight') # Must match wpimath API.
 
     def __init__(self) -> None:
-        self.frontLeftLocation = wpimath.geometry.Translation2d(0.381, 0.381)
-        self.frontRightLocation = wpimath.geometry.Translation2d(0.381, -0.381)
-        self.backLeftLocation = wpimath.geometry.Translation2d(-0.381, 0.381)
-        self.backRightLocation = wpimath.geometry.Translation2d(-0.381, -0.381)
+        # Create SwerverModule objects from swerveConfig.
+        modules = {}
+        for (modName, modConfig) in swerveConfig.items():
+            if modName == 'swerveDrive':
+                continue
+            newModule = {}
+            translation = Translation2d(*modConfig['location'])
+            translation *= kModuleLocationComponent
+            newModule['location'] = translation
+            newModule['swerveModule'] = SwerveModule(modConfig['drive']['id'],
+                                                     modConfig['angle']['id'],
+                                                     modConfig['encoder']['id'],
+                                                     modConfig['encoder']['offset'])
+            modules[modName] = newModule
+        self.modules = modules
 
-        self.frontLeft = swervemodule.SwerveModule(1, 2, 0, 1, 2, 3)
-        self.frontRight = swervemodule.SwerveModule(3, 4, 4, 5, 6, 7)
-        self.backLeft = swervemodule.SwerveModule(5, 6, 8, 9, 10, 11)
-        self.backRight = swervemodule.SwerveModule(7, 8, 12, 13, 14, 15)
+        self.gyro = Pigeon2(swerveConfig['swerveDrive']['imu']['id'])
 
-        self.gyro = wpilib.AnalogGyro(0)
+        self.kinematics = SwerveDrive4Kinematics(modules['frontLeft']['location'],
+                                                 modules['frontRight']['location'],
+                                                 modules['backLeft']['location'],
+                                                 modules['backRight']['location'])
 
-        self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
-            self.frontLeftLocation,
-            self.frontRightLocation,
-            self.backLeftLocation,
-            self.backRightLocation,
-        )
+        self.odometry = SwerveDrive4Odometry(self.kinematics,
+                                             Rotation2d.fromDegrees(self.gyro.get_yaw()),
+                                             ( modules['frontLeft']['swerveModule'].getPosition(),
+                                               modules['frontRight']['swerveModule'].getPosition(),
+                                               modules['backLeft']['swerveModule'].getPosition(),
+                                               modules['backRight']['swerveModule'].getPosition(),
+                                              ), )
 
-        self.odometry = wpimath.kinematics.SwerveDrive4Odometry(
-            self.kinematics,
-            self.gyro.getRotation2d(),
-            (
-                self.frontLeft.getPosition(),
-                self.frontRight.getPosition(),
-                self.backLeft.getPosition(),
-                self.backRight.getPosition(),
-            ),
-        )
-
-        self.gyro.reset()
+        self.gyro.set_yaw(0) # FIXME: shouldn't we reset before above objects?
 
     def drive(
         self,
@@ -69,33 +94,26 @@ class Drivetrain:
         :param periodSeconds: Time
         """
         swerveModuleStates = self.kinematics.toSwerveModuleStates(
-            wpimath.kinematics.ChassisSpeeds.discretize(
+            ChassisSpeeds.discretize(
                 (
-                    wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
-                        xSpeed, ySpeed, rot, self.gyro.getRotation2d()
+                    ChassisSpeeds.fromFieldRelativeSpeeds(
+                        xSpeed, ySpeed, rot, Rotation2d.fromDegrees(self.gyro.get_yaw())
                     )
                     if fieldRelative
-                    else wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
+                    else ChassisSpeeds(xSpeed, ySpeed, rot)
                 ),
                 periodSeconds,
             )
         )
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
-            swerveModuleStates, kMaxSpeed
-        )
-        self.frontLeft.setDesiredState(swerveModuleStates[0])
-        self.frontRight.setDesiredState(swerveModuleStates[1])
-        self.backLeft.setDesiredState(swerveModuleStates[2])
-        self.backRight.setDesiredState(swerveModuleStates[3])
+        SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveModuleStates, kMaxSpeed)
+        for idx, modName in enumerate(DriveTrain.moduleOrder):
+            self.modules[modName].setDesiredState(swerveModuleStates[idx])
 
     def updateOdometry(self) -> None:
         """Updates the field relative position of the robot."""
-        self.odometry.update(
-            self.gyro.getRotation2d(),
-            (
-                self.frontLeft.getPosition(),
-                self.frontRight.getPosition(),
-                self.backLeft.getPosition(),
-                self.backRight.getPosition(),
-            ),
-        )
+        self.odometry.update(Rotation2d.fromDegrees(self.gyro.get_yaw()),
+                             ( self.modules['frontLeft']['swerveModule'].getPosition(),
+                               self.modules['frontRight']['swerveModule'].getPosition(),
+                               self.modules['backLeft']['swerveModule'].getPosition(),
+                               self.modules['backRight']['swerveModule'].getPosition(),
+                              ), )

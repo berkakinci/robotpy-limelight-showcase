@@ -1,18 +1,22 @@
 #
-# Copyright (c) FIRST and other WPILib contributors.
+# Copyright (c) Berk Akinci, FIRST and other WPILib contributors.
 # Open Source Software; you can modify and/or share it under the terms of
 # the WPILib BSD license file in the root directory of this project.
 #
 
 import math
-import wpilib
 import wpimath.kinematics
-import wpimath.geometry
+from wpimath.geometry import Rotation2d
 import wpimath.controller
 import wpimath.trajectory
+import rev
+import phoenix5.sensors
 
 kWheelRadius = 0.0508
-kEncoderResolution = 4096
+kDriveGearRatio = 8.14/1
+kTurningEncoderDirectionCW = True
+kTurningEncoderCodeCount = 2**12
+kTurningEncoderTimeoutMS = 500
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
 
@@ -20,36 +24,29 @@ kModuleMaxAngularAcceleration = math.tau
 class SwerveModule:
     def __init__(
         self,
-        driveMotorChannel: int,
-        turningMotorChannel: int,
-        driveEncoderChannelA: int,
-        driveEncoderChannelB: int,
-        turningEncoderChannelA: int,
-        turningEncoderChannelB: int,
+        driveMotorID: int,
+        turningMotorID: int,
+        turningEncoderID: int,
+        turningEncoderOffsetDegrees: int,
     ) -> None:
-        """Constructs a SwerveModule with a drive motor, turning motor, drive encoder and turning encoder.
+        """Constructs a SwerveModule with a drive motor, turning motor and turning encoder.
 
-        :param driveMotorChannel:      PWM output for the drive motor.
-        :param turningMotorChannel:    PWM output for the turning motor.
-        :param driveEncoderChannelA:   DIO input for the drive encoder channel A
-        :param driveEncoderChannelB:   DIO input for the drive encoder channel B
-        :param turningEncoderChannelA: DIO input for the turning encoder channel A
-        :param turningEncoderChannelB: DIO input for the turning encoder channel B
+        :param driveMotorID:      CAN ID the drive motor.
+        :param turningMotorID:    CAN ID for the turning motor.
+        :param turningEncoderID:  CAN ID for the turning encoder
         """
-        self.driveMotor = wpilib.PWMSparkMax(driveMotorChannel)
-        self.turningMotor = wpilib.PWMSparkMax(turningMotorChannel)
+        self.driveMotor = rev.CANSparkMax(driveMotorID)
+        self.turningMotor = rev.CANSparkMax(turningMotorID)
 
-        self.driveEncoder = wpilib.Encoder(driveEncoderChannelA, driveEncoderChannelB)
-        self.turningEncoder = wpilib.Encoder(
-            turningEncoderChannelA, turningEncoderChannelB
-        )
+        self.driveEncoder = driveMotor.getEncoder()
+        self.turningEncoder = phoenix5.sensors.CANCoder(turningEncoderID)
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.drivePIDController = wpimath.controller.PIDController(1, 0, 0)
+        self.drivePIDController = wpimath.controller.PIDController(0.01, 0, 0)
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.turningPIDController = wpimath.controller.ProfiledPIDController(
-            1,
+        self.turningPIDController = wpimath.controller.ProfiledPIDControllerRadians(
+            0.01,
             0,
             0,
             wpimath.trajectory.TrapezoidProfile.Constraints(
@@ -59,24 +56,35 @@ class SwerveModule:
         )
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.driveFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(1, 3)
-        self.turnFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(1, 0.5)
+        self.driveFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(0.01, 3)
+        self.turnFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(0.01, 0.5)
 
-        # Set the distance per pulse for the drive encoder. We can simply use the
-        # distance traveled for one rotation of the wheel divided by the encoder
-        # resolution.
-        self.driveEncoder.setDistancePerPulse(
-            math.tau * kWheelRadius / kEncoderResolution
+        # Set the conversion factor to get meters/second out of encoder.
+        # wpimath.kinematics.SwerveModuleState wants units m/s
+        # Native units for encoder are RPM.
+        # We use the distance traveled for one rotation of the wheel, gear ratio and
+        # conversion from the minutes to seconds.
+        wheelCircumference = math.tau * kWheelRadius
+        motorRevolutionsPerMeter = kDriveGearRatio * (1 / wheelCircumference)
+        self.driveEncoder.setVelocityConversionFactor(
+            60 / motorRevolutionsPerMeter
         )
 
-        # Set the distance (in this case, angle) in radians per pulse for the turning encoder.
-        # This is the the angle through an entire rotation (2 * pi) divided by the
-        # encoder resolution.
-        self.turningEncoder.setDistancePerPulse(math.tau / kEncoderResolution)
+        # Set the conversion factor to get radians out of encoder.
+        # wpimath.geometry.Rotation2d() wants radians.
+        self.turningEncoder.configAbsoluteSensorRange(phoenix5.sensors.AbsoluteSensorRange.Unsigned_0_to_360,
+                                                      kTurningEncoderTimeoutMS)
+        self.turningEncoder.configSensorDirection(kTurningEncoderDirectionCW,
+                                                  kTurningEncoderTimeoutMS)
+        self.turningEncoder.configMagnetOffset(offsetDegrees = turningEncoderOffsetDegrees,
+                                               timeoutMs = kTurningEncoderTimeoutMS)
+        self.turningEncoder.configFeedbackCoefficient(sensorCoefficient = math.tau/kTurningEncoderCodeCount,
+                                                      unitString = 'radians',
+                                                      timeoutMs = kTurningEncoderTimeoutMS)
 
-        # Limit the PID Controller's input range between -pi and pi and set the input
+        # Limit the PID Controller's input range between 0 and tau and set the input
         # to be continuous.
-        self.turningPIDController.enableContinuousInput(-math.pi, math.pi)
+        self.turningPIDController.enableContinuousInput(0, math.tau)
 
     def getState(self) -> wpimath.kinematics.SwerveModuleState:
         """Returns the current state of the module.
@@ -84,8 +92,8 @@ class SwerveModule:
         :returns: The current state of the module.
         """
         return wpimath.kinematics.SwerveModuleState(
-            self.driveEncoder.getRate(),
-            wpimath.geometry.Rotation2d(self.turningEncoder.getDistance()),
+            self.driveEncoder.getVelocity(),
+            Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: Verify 0-tau absolute is OK.  otherwise getPosition()
         )
 
     def getPosition(self) -> wpimath.kinematics.SwerveModulePosition:
@@ -94,8 +102,8 @@ class SwerveModule:
         :returns: The current position of the module.
         """
         return wpimath.kinematics.SwerveModulePosition(
-            self.driveEncoder.getRate(),
-            wpimath.geometry.Rotation2d(self.turningEncoder.getDistance()),
+            self.driveEncoder.getVelocity(),
+            Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: this or getPosition()
         )
 
     def setDesiredState(
@@ -106,33 +114,27 @@ class SwerveModule:
         :param desiredState: Desired state with speed and angle.
         """
 
-        encoderRotation = wpimath.geometry.Rotation2d(self.turningEncoder.getDistance())
+        currentState = self.getState()
 
         # Optimize the reference state to avoid spinning further than 90 degrees
-        state = wpimath.kinematics.SwerveModuleState.optimize(
-            desiredState, encoderRotation
-        )
+        desiredState = wpimath.kinematics.SwerveModuleState.optimize(desiredState,
+                                                                     currentState.angle)
 
         # Scale speed by cosine of angle error. This scales down movement perpendicular to the desired
         # direction of travel that can occur when modules change directions. This results in smoother
         # driving.
-        state.speed *= (state.angle - encoderRotation).cos()
+        desiredState.speed *= (desiredState.angle - currentState.angle).cos()
 
         # Calculate the drive output from the drive PID controller.
-        driveOutput = self.drivePIDController.calculate(
-            self.driveEncoder.getRate(), state.speed
-        )
-
-        driveFeedforward = self.driveFeedforward.calculate(state.speed)
+        driveOutput = self.drivePIDController.calculate(currentState.speed,
+                                                        desiredState.speed)
+        driveFeedforward = self.driveFeedforward.calculate(desiredState.speed)
 
         # Calculate the turning motor output from the turning PID controller.
-        turnOutput = self.turningPIDController.calculate(
-            self.turningEncoder.getDistance(), state.angle.radians()
-        )
+        turnOutput = self.turningPIDController.calculate(currentState.angle.radians(),
+                                                         desiredState.angle.radians())
 
-        turnFeedforward = self.turnFeedforward.calculate(
-            self.turningPIDController.getSetpoint().velocity
-        )
+        turnFeedforward = self.turnFeedforward.calculate(self.turningPIDController.getSetpoint().velocity)
 
         self.driveMotor.setVoltage(driveOutput + driveFeedforward)
         self.turningMotor.setVoltage(turnOutput + turnFeedforward)
