@@ -5,10 +5,10 @@
 #
 
 import math
-import wpimath.kinematics
+from wpimath.kinematics import SwerveModuleState, SwerveModulePosition
 from wpimath.geometry import Rotation2d
-import wpimath.controller
-import wpimath.trajectory
+from wpimath.controller import PIDController, ProfiledPIDControllerRadians, SimpleMotorFeedforwardMeters
+from wpimath.trajectory import TrapezoidProfile
 import rev
 import phoenix5.sensors
 
@@ -42,22 +42,22 @@ class SwerveModule:
         self.turningEncoder = phoenix5.sensors.CANCoder(turningEncoderID)
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.drivePIDController = wpimath.controller.PIDController(0.01, 0, 0)
+        self.drivePIDController = PIDController(0.01, 0, 0)
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.turningPIDController = wpimath.controller.ProfiledPIDControllerRadians(
+        self.turningPIDController = ProfiledPIDControllerRadians(
             0.01,
             0,
             0,
-            wpimath.trajectory.TrapezoidProfile.Constraints(
+            TrapezoidProfile.Constraints(
                 kModuleMaxAngularVelocity,
                 kModuleMaxAngularAcceleration,
             ),
         )
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.driveFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(0.01, 3)
-        self.turnFeedforward = wpimath.controller.SimpleMotorFeedforwardMeters(0.01, 0.5)
+        self.driveFeedforward = SimpleMotorFeedforwardMeters(0.01, 3)
+        self.turnFeedforward = SimpleMotorFeedforwardMeters(0.01, 0.5)
 
         # Set the conversion factor to get meters/second out of encoder.
         # wpimath.kinematics.SwerveModuleState wants units m/s
@@ -86,28 +86,28 @@ class SwerveModule:
         # to be continuous.
         self.turningPIDController.enableContinuousInput(0, math.tau)
 
-    def getState(self) -> wpimath.kinematics.SwerveModuleState:
+    def getState(self) -> SwerveModuleState:
         """Returns the current state of the module.
 
         :returns: The current state of the module.
         """
-        return wpimath.kinematics.SwerveModuleState(
+        return SwerveModuleState(
             self.driveEncoder.getVelocity(),
             Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: Verify 0-tau absolute is OK.  otherwise getPosition()
         )
 
-    def getPosition(self) -> wpimath.kinematics.SwerveModulePosition:
+    def getPosition(self) -> SwerveModulePosition:
         """Returns the current position of the module.
 
         :returns: The current position of the module.
         """
-        return wpimath.kinematics.SwerveModulePosition(
+        return SwerveModulePosition(
             self.driveEncoder.getVelocity(),
             Rotation2d(self.turningEncoder.getAbsolutePosition()), # FIXME: this or getPosition()
         )
 
     def setDesiredState(
-        self, desiredState: wpimath.kinematics.SwerveModuleState
+        self, desiredState: SwerveModuleState
     ) -> None:
         """Sets the desired state for the module.
 
@@ -117,8 +117,8 @@ class SwerveModule:
         currentState = self.getState()
 
         # Optimize the reference state to avoid spinning further than 90 degrees
-        desiredState = wpimath.kinematics.SwerveModuleState.optimize(desiredState,
-                                                                     currentState.angle)
+        desiredState = SwerveModuleState.optimize(desiredState,
+                                                  currentState.angle)
 
         # Scale speed by cosine of angle error. This scales down movement perpendicular to the desired
         # direction of travel that can occur when modules change directions. This results in smoother
