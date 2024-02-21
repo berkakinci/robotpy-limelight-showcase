@@ -13,7 +13,7 @@ import rev
 import phoenix6.hardware as ctre
 import phoenix6.configs as ctre_configs
 
-kWheelRadius = 0.0508
+kWheelRadius = 0.0500
 kDriveGearRatio = 8.14/1
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
@@ -43,7 +43,8 @@ class SwerveModule:
         :param driveMotorID:      CAN ID the drive motor.
         :param turningMotorID:    CAN ID for the turning motor.
         :param turningEncoderID:  CAN ID for the turning encoder
-        :param turningEncoderOffsetRotations: Encoder offset (in rotations) for pointing to robot front (+X)
+        :param turningEncoderOffsetRotations: Encoder offset (in rotations); read back when
+                                              wheels pointing robot front (+X); Bevel pointing (+Y)
         """
         self.driveMotor = rev.CANSparkMax(driveMotorID,
                                           rev.CANSparkLowLevel.MotorType.kBrushless)
@@ -74,21 +75,20 @@ class SwerveModule:
 
         # Set the conversion factor to get meters/second out of encoder.
         # wpimath.kinematics.SwerveModuleState wants units m/s
-        # Native units for encoder are RPM.
+        # Native units for encoder are RPM and revolutions.
         # We use the distance traveled for one rotation of the wheel, gear ratio and
         # conversion from the minutes to seconds.
         wheelCircumference = math.tau * kWheelRadius
         motorRevolutionsPerMeter = kDriveGearRatio * (1 / wheelCircumference)
-        self.driveEncoder.setVelocityConversionFactor(
-            60 / motorRevolutionsPerMeter
-        )
+        self.driveEncoder.setVelocityConversionFactor(1 / (motorRevolutionsPerMeter * 60))
+        self.driveEncoder.setPositionConversionFactor(1 / motorRevolutionsPerMeter)
 
         # Set up encoder for our PID input expectations; and robot encoder magnet offsets.
         turningEncoderConfig = ctre_configs.CANcoderConfiguration()
         magSensor = turningEncoderConfig.magnet_sensor
         magSensor.with_sensor_direction(magSensor.sensor_direction.CLOCKWISE_POSITIVE)
         magSensor.with_absolute_sensor_range(magSensor.absolute_sensor_range.SIGNED_PLUS_MINUS_HALF)
-        magSensor.with_magnet_offset(turningEncoderOffsetRotations)
+        magSensor.with_magnet_offset(-turningEncoderOffsetRotations)
         self.turningEncoder.configurator.apply(turningEncoderConfig)
 
         # Limit the PID Controller's input range between -tau/2 and +tau/2 and set the input

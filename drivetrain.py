@@ -18,22 +18,22 @@ swerveConfig = {
     'frontRight'  : { 'drive'    : { 'id'     :    5, },
                       'angle'    : { 'id'     :    1, },
                       'encoder'  : { 'id'     :    9,
-                                     'offset' : -135, }, # FIXME: placeholder
+                                     'offset' :   -0.185950454, },
                       'location' : (+1, -1), },
     'backRight'   : { 'drive'    : { 'id'     :    8, },
                       'angle'    : { 'id'     :    4, },
                       'encoder'  : { 'id'     :   12,
-                                     'offset' :  135, }, # FIXME: placeholder
+                                     'offset' :   -0.474863481, },
                       'location' : (-1, -1), },
     'frontLeft'   : { 'drive'    : { 'id'     :    6, },
                       'angle'    : { 'id'     :    2, },
                       'encoder'  : { 'id'     :   10,
-                                     'offset' :  -45, }, # FIXME: placeholder
+                                     'offset' :   -0.473129584, },
                       'location' : (+1, +1), },
     'backLeft'    : { 'drive'    : { 'id'     :    7, },
                       'angle'    : { 'id'     :    3, },
                       'encoder'  : { 'id'     :   11,
-                                     'offset' :   45, }, # FIXME: placeholder
+                                     'offset' :    0.462900590, },
                       'location' : (-1, +1), },
 }
 
