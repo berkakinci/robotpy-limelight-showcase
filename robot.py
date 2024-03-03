@@ -13,7 +13,9 @@ from drivetrain import Drivetrain
 class Robot(wpilib.TimedRobot):
     def robotInit(self) -> None:
         """Robot initialization function"""
-        print("Yes; we are alive")
+        self.serial_number=Robot._get_platform_sn()
+        print(f"Yes; we are alive: SN {self.serial_number}")
+
         self.counter=0
         self.ll=LimeLight()
         self.swerve=Drivetrain()
@@ -69,3 +71,17 @@ class Robot(wpilib.TimedRobot):
         ySpeed = 0
         rotSpeed = math.tau/10
         self.swerve.drive(xSpeed, ySpeed, rotSpeed, fieldRelative, self.getPeriod())
+
+    @staticmethod
+    def _get_platform_sn() -> str:
+        """
+        Gets serial number of the platform we're running on.
+        """
+        sn=''
+        try:
+            with open('/sys/firmware/devicetree/base/serial-number') as snfile:
+                sn=snfile.read()
+                sn.strip('\x00')
+        except FileNotFoundError:
+            sn='simulation'
+        return sn
