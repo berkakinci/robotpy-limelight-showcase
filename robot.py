@@ -81,7 +81,7 @@ class Robot(wpilib.TimedRobot):
         try:
             with open('/sys/firmware/devicetree/base/serial-number') as snfile:
                 sn=snfile.read()
-                sn.strip('\x00')
+                sn=sn.strip('\x00')
         except FileNotFoundError:
             sn='simulation'
         return sn
