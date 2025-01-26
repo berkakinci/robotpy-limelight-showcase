@@ -7,8 +7,9 @@
 import math
 from wpimath.kinematics import SwerveModuleState, SwerveModulePosition
 from wpimath.geometry import Rotation2d
-from wpimath.controller import PIDController, ProfiledPIDControllerRadians, SimpleMotorFeedforwardMeters
-from wpimath.trajectory import TrapezoidProfileRadians
+from wpimath.controller import PIDController, ProfiledPIDController, SimpleMotorFeedforwardMeters
+from wpimath.trajectory import TrapezoidProfile
+from wpiutil import Sendable, SendableRegistry
 import rev
 import phoenix6.hardware as ctre
 import phoenix6.configs as ctre_configs
@@ -30,7 +31,7 @@ class radCANcoder(ctre.CANcoder):
         return math.tau * self.get_position().value
 
 
-class SwerveModule:
+class SwerveModule(Sendable):
     def __init__(
         self,
         driveMotorID: int,
@@ -46,10 +47,13 @@ class SwerveModule:
         :param turningEncoderOffsetRotations: Encoder offset (in rotations); read back when
                                               wheels pointing robot front (+X); Bevel pointing (+Y)
         """
+        super().__init__()
+
         self.driveMotor = rev.CANSparkMax(driveMotorID,
                                           rev.CANSparkLowLevel.MotorType.kBrushless)
         self.turningMotor = rev.CANSparkMax(turningMotorID,
                                             rev.CANSparkLowLevel.MotorType.kBrushless)
+        # FIXME: Factory reset and config?
 
         self.driveEncoder = self.driveMotor.getEncoder()
         self.turningEncoder = radCANcoder(turningEncoderID)
@@ -59,15 +63,18 @@ class SwerveModule:
         self.drivePIDController = PIDController(0.01, 0, 0)
 
         # Gains are for example purposes only - must be determined for your own robot!
-        self.turningPIDController = ProfiledPIDControllerRadians(
-            0.01,
+        self.turningPIDController = ProfiledPIDController(
+            1.5,
             0,
             0,
-            TrapezoidProfileRadians.Constraints(
+            TrapezoidProfile.Constraints(
                 kModuleMaxAngularVelocity,
                 kModuleMaxAngularAcceleration,
             ),
         )
+
+        self.drivePIDController.reset()
+        self.turningPIDController.reset(self.turningEncoder.get_absolute_position_radians())
 
         # Gains are for example purposes only - must be determined for your own robot!
         self.driveFeedforward = SimpleMotorFeedforwardMeters(0.01, 3)
@@ -159,3 +166,18 @@ class SwerveModule:
         dump['turningMotorEncoderPos'] = self.turningMotorEncoder.getPosition()
         dump['turningMotorEncoderVel'] = self.turningMotorEncoder.getVelocity()
         return dump
+
+    def getDebugProperty(self, key):
+        dump=self.debugSensorDump()
+        return dump[key]
+
+    def initSendable(self, builder):
+        print("IM HERE IM HERE IM HERE IM HERE IM HERE")
+        builder.setSmartDashboardType("Swerve Module")
+        SendableRegistry.add(self.turningPIDController, 'turningPID')
+        #wpilib.SmartDashboard.putData('turningPID', self.turningPIDController)
+        return
+        dump=self.debugSensorDump()
+        for key in dump.keys():
+            builder.addDoubleProperty(key, (lambda key: (self.getDebugProperty(key))))
+        return

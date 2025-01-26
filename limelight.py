@@ -75,6 +75,7 @@ class LimeLight:
         return True
 
     def waitReady(self, verbose=False):
+        return # FIXME: Don't wait for missing Limelight
         if 'pyfrc.tests' in modules:
             if verbose:
                 print('Not waiting for LimeLight in pyfrc.tests.')

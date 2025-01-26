@@ -7,6 +7,7 @@
 
 import wpilib
 import math
+import pprint
 from limelight import LimeLight
 from drivetrain import Drivetrain
 
@@ -37,6 +38,12 @@ class Robot(wpilib.TimedRobot):
               "camMode", self.ll.camMode,
               "pipeline", self.ll.pipeline,
               "getpipe", self.ll.getpipe)
+        wpilib.SmartDashboard.init()
+#        wpilib.SmartDashboard.putData('frontRight', self.swerve.modules['frontRight']['swerveModule'].turningPIDController)
+#        wpilib.SmartDashboard.putData('backRight', self.swerve.modules['backRight']['swerveModule'].turningPIDController)
+#        wpilib.SmartDashboard.putData('frontLeft', self.swerve.modules['frontLeft']['swerveModule'].turningPIDController)
+#        wpilib.SmartDashboard.putData('backLeft', self.swerve.modules['backLeft']['swerveModule'].turningPIDController)
+        wpilib.SmartDashboard.putData('modSender', self.swerve.modules['frontRight']['swerveModule'])
 
     def robotPeriodic(self) -> None:
         self.counter+=1
@@ -47,8 +54,9 @@ class Robot(wpilib.TimedRobot):
                   'ty', self.ll.ty,
                   'tid', self.ll.tid,
                   'targetpose_robotspace', self.ll.targetpose_robotspace)
-            print(self.swerve.debugSensorDump())
+            pprint.pprint(self.swerve.debugSensorDump())
         self.swerve.updateOdometry()
+        wpilib.SmartDashboard.updateValues()
 
     def disabledPeriodic(self) -> None:
         pass
